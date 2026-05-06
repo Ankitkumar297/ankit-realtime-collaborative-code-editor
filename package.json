@@ -3,9 +3,13 @@
   "version": "1.0.0",
   "main": "server/server.js",
   "type": "module",
+  "workspaces": [
+    "client"
+  ],
   "scripts": {
-    "dev": "cd client && npm run dev",
-    "build": "cd client && npm run build",
+    "install:all": "npm install && npm install --workspace=client",
+    "dev": "npm run dev --workspace=client",
+    "build": "npm install --workspace=client && npm run build --workspace=client",
     "server:dev": "nodemon server/server.js",
     "server:prod": "node server/server.js",
     "lint": "eslint client/src server",
@@ -20,11 +24,11 @@
     "prettier": "^3.2.5"
   },
   "dependencies": {
+    "axios": "^1.6.8",
+    "cors": "^2.8.5",
     "express": "^5.0.0",
     "socket.io": "^4.7.5",
-    "cors": "^2.8.5",
-    "axios": "^1.6.8",
-    "uuid": "^9.0.1",
-    "tree-kill": "^1.2.2"
+    "tree-kill": "^1.2.2",
+    "uuid": "^14.0.0"
   }
 }
