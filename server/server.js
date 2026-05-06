@@ -49,10 +49,11 @@ function getAllConnectedClients(roomId) {
 io.on('connection', (socket) => {
   console.log('socket connected', socket.id);
 
-  socket.on(ACTIONS.JOIN, ({ roomId, username }) => {
+  socket.on(ACTIONS.JOIN, async ({ roomId, username }) => {
+    const trimmedRoomId = roomId.trim();
     userSocketMap[socket.id] = username;
-    socket.join(roomId);
-    const clients = getAllConnectedClients(roomId);
+    await socket.join(trimmedRoomId);
+    const clients = getAllConnectedClients(trimmedRoomId);
     clients.forEach(({ socketId }) => {
       io.to(socketId).emit(ACTIONS.JOINED, {
         clients,
@@ -63,7 +64,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on(ACTIONS.CODE_CHANGE, ({ roomId, code }) => {
-    socket.in(roomId).emit(ACTIONS.CODE_CHANGE, { code });
+    socket.in(roomId.trim()).emit(ACTIONS.CODE_CHANGE, { code });
   });
 
   socket.on(ACTIONS.SYNC_CODE, ({ socketId, code, language }) => {
@@ -71,7 +72,22 @@ io.on('connection', (socket) => {
   });
 
   socket.on(ACTIONS.LANGUAGE_CHANGE, ({ roomId, language }) => {
-    socket.in(roomId).emit(ACTIONS.LANGUAGE_CHANGE, { language });
+    socket.in(roomId.trim()).emit(ACTIONS.LANGUAGE_CHANGE, { language });
+  });
+
+  socket.on(ACTIONS.SEND_MESSAGE, ({ roomId, message, username }) => {
+    if (!roomId || !message) return;
+    const trimmedRoomId = roomId.trim();
+    const response = {
+      message: message.trim(),
+      username: username || 'Anonymous',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+    console.log(`[CHAT] Broadcasting to room ${trimmedRoomId}:`, response);
+    // Send to everyone else in the room
+    socket.broadcast.to(trimmedRoomId).emit(ACTIONS.RECEIVE_MESSAGE, response);
+    // Send back to the sender
+    socket.emit(ACTIONS.RECEIVE_MESSAGE, response);
   });
 
   // Interactive Terminal Support

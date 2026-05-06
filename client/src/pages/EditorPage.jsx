@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import ACTIONS from '../Actions';
 import Client from '../components/Client';
 import Editor from '../components/Editor';
+import Chat from '../components/Chat';
 import { initSocket } from '../socket';
 import {
   useLocation,
@@ -98,6 +99,15 @@ const EditorPage = () => {
       socketRef.current.emit(ACTIONS.JOIN, {
         roomId,
         username: location.state?.username,
+      });
+
+      // Handle reconnection: re-join the room if the socket reconnects
+      socketRef.current.on('connect', () => {
+        console.log('Socket reconnected, re-joining room');
+        socketRef.current.emit(ACTIONS.JOIN, {
+          roomId,
+          username: location.state?.username,
+        });
       });
 
       socketRef.current.on(ACTIONS.JOINED, ({ clients, username, socketId }) => {
@@ -226,6 +236,11 @@ const EditorPage = () => {
           </div>
         </div>
       </div>
+      <Chat
+        socket={socket}
+        roomId={roomId}
+        username={location.state?.username}
+      />
     </div>
   );
 };

@@ -9,6 +9,8 @@ const ACTIONS = {
   CODE_RUN: 'code-run',
   CODE_OUTPUT: 'code-output',
   TERMINAL_INPUT: 'terminal-input',
+  SEND_MESSAGE: 'send-message',
+  RECEIVE_MESSAGE: 'receive-message',
 };
 
 export default ACTIONS;
