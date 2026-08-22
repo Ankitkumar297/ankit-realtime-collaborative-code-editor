@@ -118,9 +118,23 @@ const Editor = ({ socket, roomId, onCodeChange, language }) => {
   // Handle code synchronization
   useEffect(() => {
     if (socket) {
-      socket.on(ACTIONS.CODE_CHANGE, ({ code }) => {
+      socket.on(ACTIONS.CODE_CHANGE, ({ code, language: syncLanguage }) => {
         if (code !== null && code !== editorRef.current.getValue()) {
           editorRef.current.setValue(code);
+        }
+        // If a language is provided during sync, we update it too
+        if (syncLanguage) {
+          const getMode = (lang) => {
+            switch (lang) {
+              case 'python': return 'python';
+              case 'c': return 'text/x-csrc';
+              case 'cpp':
+              case 'c++': return 'text/x-c++src';
+              case 'java': return 'text/x-java';
+              default: return 'javascript';
+            }
+          };
+          editorRef.current.setOption('mode', getMode(syncLanguage));
         }
       });
     }

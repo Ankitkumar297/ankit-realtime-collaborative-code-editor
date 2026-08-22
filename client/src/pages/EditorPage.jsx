@@ -113,11 +113,15 @@ const EditorPage = () => {
       socketRef.current.on(ACTIONS.JOINED, ({ clients, username, socketId }) => {
         if (username !== location.state?.username) {
           toast.success(`${username} joined the room.`);
-          socketRef.current.emit(ACTIONS.SYNC_CODE, {
-            code: codeRef.current,
-            socketId,
-            language: languageRef.current,
-          });
+          // Send current code to the new user
+          // We use a small timeout to ensure the new user's editor is ready to receive
+          setTimeout(() => {
+            socketRef.current.emit(ACTIONS.SYNC_CODE, {
+              code: codeRef.current,
+              socketId,
+              language: languageRef.current,
+            });
+          }, 500);
         }
         setClients(clients);
       });

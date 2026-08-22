@@ -16,12 +16,9 @@ const Chat = ({ socket, roomId, username }) => {
   }, [messages]);
 
   useEffect(() => {
-    if (!socket) {
-      console.log('Chat: No socket available yet');
-      return;
-    }
+    if (!socket) return;
 
-    console.log('Chat: Socket available. ID:', socket.id, 'Connected:', socket.connected);
+    console.log('Chat: Socket initialized');
 
     const handleReceiveMessage = (data) => {
       console.log('Chat: Received message event:', data);
