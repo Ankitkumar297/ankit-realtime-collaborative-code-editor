@@ -13,6 +13,7 @@
     "build": "npm run build --workspace=client",
     "server:dev": "nodemon --ignore server/temp server/server.js",
     "server:prod": "node server/server.js",
+    "start": "node server/server.js",
     "lint": "eslint client/src server",
     "lint:fix": "eslint client/src server --fix",
     "format": "prettier --write .",

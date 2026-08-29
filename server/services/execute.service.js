@@ -21,6 +21,9 @@ export const spawnCode = async (code, language, onData) => {
   const jobId = uuidv4();
   let filepath, executeCommand, args = [];
 
+  const isWin = process.platform === 'win32';
+  const exeExt = isWin ? '.exe' : '.out';
+
   if (language === 'javascript' || language === 'js') {
     filepath = path.join(tempDir, `${jobId}.js`);
     fs.writeFileSync(filepath, code);
@@ -29,11 +32,11 @@ export const spawnCode = async (code, language, onData) => {
   } else if (language === 'python' || language === 'py') {
     filepath = path.join(tempDir, `${jobId}.py`);
     fs.writeFileSync(filepath, code);
-    executeCommand = 'python';
+    executeCommand = isWin ? 'python' : 'python3';
     args = [filepath];
   } else if (language === 'c') {
     filepath = path.join(tempDir, `${jobId}.c`);
-    const outpath = path.join(tempDir, `${jobId}.exe`);
+    const outpath = path.join(tempDir, `${jobId}${exeExt}`);
     fs.writeFileSync(filepath, code);
     
     // Compile synchronously for simplicity in spawn mode
@@ -46,7 +49,7 @@ export const spawnCode = async (code, language, onData) => {
     executeCommand = outpath;
   } else if (language === 'cpp' || language === 'c++') {
     filepath = path.join(tempDir, `${jobId}.cpp`);
-    const outpath = path.join(tempDir, `${jobId}.exe`);
+    const outpath = path.join(tempDir, `${jobId}${exeExt}`);
     fs.writeFileSync(filepath, code);
     
     await new Promise((resolve, reject) => {
