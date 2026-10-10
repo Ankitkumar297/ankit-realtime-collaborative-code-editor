@@ -2,15 +2,10 @@ import React, { useEffect, useRef } from 'react';
 import Codemirror from 'codemirror';
 import 'codemirror/lib/codemirror.css';
 import 'codemirror/theme/dracula.css';
-
-// ── Language modes ───────────────────
 import 'codemirror/mode/javascript/javascript';
 import 'codemirror/mode/python/python';
 import 'codemirror/mode/clike/clike';
-
-// ── VS Code features ─────────────────
 import 'codemirror/addon/edit/closebrackets';
-import 'codemirror/addon/edit/closetag';
 import 'codemirror/addon/edit/matchbrackets';
 import 'codemirror/addon/selection/active-line';
 import 'codemirror/addon/fold/foldgutter';
@@ -30,38 +25,39 @@ import 'codemirror/addon/hint/show-hint';
 import 'codemirror/addon/hint/show-hint.css';
 import 'codemirror/addon/hint/javascript-hint';
 import 'codemirror/addon/hint/anyword-hint';
-
 import ACTIONS from '../Actions';
 
-const Editor = ({ socket, roomId, onCodeChange, language }) => {
+const getMode = (language) => {
+  switch (language) {
+    case 'python': return 'python';
+    case 'c': return 'text/x-csrc';
+    case 'cpp':
+    case 'c++': return 'text/x-c++src';
+    case 'java': return 'text/x-java';
+    case 'typescript': return 'application/typescript';
+    case 'csharp': return 'text/x-csharp';
+    case 'node':
+    case 'javascript': return 'javascript';
+    default: return 'javascript';
+  }
+};
+
+const Editor = ({ socket, roomId, activeFile, onCodeChange, canEdit }) => {
   const editorRef = useRef(null);
   const textareaRef = useRef(null);
-  const socketRef = useRef(socket);
+  const propsRef = useRef({});
+  const remoteCursorsRef = useRef(new Map());
+  const cursorMarksRef = useRef([]);
+  const redrawRemoteCursorsRef = useRef(() => {});
+  propsRef.current = { socket, roomId, activeFile, onCodeChange, canEdit };
 
-  // Keep socketRef in sync with the socket prop
   useEffect(() => {
-    socketRef.current = socket;
-  }, [socket]);
+    if (!textareaRef.current) return undefined;
 
-  useEffect(() => {
-    if (!textareaRef.current) return;
-
-    const getMode = (lang) => {
-      switch (lang) {
-        case 'python': return 'python';
-        case 'c': return 'text/x-csrc';
-        case 'cpp':
-        case 'c++': return 'text/x-c++src';
-        case 'java': return 'text/x-java';
-        default: return 'javascript';
-      }
-    };
-
-    editorRef.current = Codemirror.fromTextArea(textareaRef.current, {
-      mode: getMode(language),
+    const editor = Codemirror.fromTextArea(textareaRef.current, {
+      mode: getMode(propsRef.current.activeFile?.language),
       theme: 'dracula',
       autoCloseBrackets: true,
-      autoCloseTags: true,
       matchBrackets: true,
       lineNumbers: true,
       styleActiveLine: true,
@@ -78,73 +74,141 @@ const Editor = ({ socket, roomId, onCodeChange, language }) => {
       smartIndent: true,
       lineWrapping: true,
       scrollPastEnd: true,
+      readOnly: !propsRef.current.canEdit,
     });
+    editorRef.current = editor;
 
-    editorRef.current.on('change', (instance, changes) => {
-      const { origin } = changes;
+    const clearCursorMarks = () => {
+      cursorMarksRef.current.forEach((mark) => mark.clear());
+      cursorMarksRef.current = [];
+    };
+
+    const drawRemoteCursors = () => {
+      clearCursorMarks();
+      const fileId = propsRef.current.activeFile?.id;
+      if (!fileId) return;
+
+      remoteCursorsRef.current.forEach((cursor) => {
+        if (cursor.fileId !== fileId) return;
+        const color = cursor.color || '#8be9fd';
+        const anchor = editor.clipPos(cursor.anchor);
+        const head = editor.clipPos(cursor.head);
+        if (editor.comparePos(anchor, head) !== 0) {
+          const from = editor.comparePos(anchor, head) < 0 ? anchor : head;
+          const to = editor.comparePos(anchor, head) < 0 ? head : anchor;
+          cursorMarksRef.current.push(editor.markText(from, to, {
+            className: 'remote-selection',
+            css: `background-color: ${color}; opacity: 0.24;`,
+          }));
+        }
+
+        const caret = document.createElement('span');
+        caret.className = 'remote-cursor-caret';
+        caret.style.borderColor = color;
+        caret.setAttribute('aria-label', `${cursor.username || 'Collaborator'} cursor`);
+        const label = document.createElement('span');
+        label.className = 'remote-cursor-label';
+        label.style.backgroundColor = color;
+        label.textContent = cursor.username || 'Collaborator';
+        caret.appendChild(label);
+        cursorMarksRef.current.push(editor.setBookmark(head, {
+          widget: caret,
+          insertLeft: true,
+        }));
+      });
+    };
+    redrawRemoteCursorsRef.current = drawRemoteCursors;
+
+    const updateCursor = () => {
+      const { socket: currentSocket, roomId: currentRoomId, activeFile: file } = propsRef.current;
+      if (!currentSocket?.connected || !file) return;
+      const selection = editor.listSelections()[0];
+      currentSocket.emit(ACTIONS.CURSOR_CHANGE, {
+        roomId: currentRoomId,
+        fileId: file.id,
+        anchor: selection.anchor,
+        head: selection.head,
+      });
+    };
+
+    const handleCursorChange = (cursor) => {
+      if (cursor.socketId === propsRef.current.socket?.id) return;
+      if (!cursor.fileId) remoteCursorsRef.current.delete(cursor.socketId);
+      else remoteCursorsRef.current.set(cursor.socketId, cursor);
+      drawRemoteCursors();
+    };
+
+    const handleJoined = ({ socketId, room }) => {
+      if (socketId !== propsRef.current.socket?.id) return;
+      remoteCursorsRef.current = new Map(
+        (room?.cursors || []).map((cursor) => [cursor.socketId, cursor]),
+      );
+      drawRemoteCursors();
+    };
+
+    const handleDisconnected = ({ socketId }) => {
+      remoteCursorsRef.current.delete(socketId);
+      drawRemoteCursors();
+    };
+
+    const handleCodeChange = ({ fileId, code }) => {
+      if (fileId !== propsRef.current.activeFile?.id || typeof code !== 'string') return;
+      if (editor.getValue() !== code) editor.setValue(code);
+    };
+
+    const changeHandler = (instance, change) => {
+      const current = propsRef.current;
       const code = instance.getValue();
-      onCodeChange(code);
-      if (origin !== 'setValue') {
-        // Use socketRef to ensure we have the latest socket instance
-        socketRef.current?.emit(ACTIONS.CODE_CHANGE, {
-          roomId,
+      current.onCodeChange?.(current.activeFile?.id, code);
+      if (change.origin !== 'setValue' && current.canEdit && current.activeFile) {
+        current.socket?.emit(ACTIONS.CODE_CHANGE, {
+          roomId: current.roomId,
+          fileId: current.activeFile.id,
           code,
         });
       }
-    });
-
-    return () => {
-      editorRef.current?.toTextArea();
     };
-  }, []);
 
-  // Handle language change
-  useEffect(() => {
-    if (editorRef.current) {
-      const getMode = (lang) => {
-        switch (lang) {
-          case 'python': return 'python';
-          case 'c': return 'text/x-csrc';
-          case 'cpp':
-          case 'c++': return 'text/x-c++src';
-          case 'java': return 'text/x-java';
-          default: return 'javascript';
-        }
-      };
-      editorRef.current.setOption('mode', getMode(language));
-    }
-  }, [language]);
-
-  // Handle code synchronization
-  useEffect(() => {
+    editor.on('change', changeHandler);
+    editor.on('cursorActivity', updateCursor);
     if (socket) {
-      socket.on(ACTIONS.CODE_CHANGE, ({ code, language: syncLanguage }) => {
-        if (code !== null && code !== editorRef.current.getValue()) {
-          editorRef.current.setValue(code);
-        }
-        // If a language is provided during sync, we update it too
-        if (syncLanguage) {
-          const getMode = (lang) => {
-            switch (lang) {
-              case 'python': return 'python';
-              case 'c': return 'text/x-csrc';
-              case 'cpp':
-              case 'c++': return 'text/x-c++src';
-              case 'java': return 'text/x-java';
-              default: return 'javascript';
-            }
-          };
-          editorRef.current.setOption('mode', getMode(syncLanguage));
-        }
-      });
+      socket.on(ACTIONS.CURSOR_CHANGE, handleCursorChange);
+      socket.on(ACTIONS.JOINED, handleJoined);
+      socket.on(ACTIONS.DISCONNECTED, handleDisconnected);
+      socket.on(ACTIONS.CODE_CHANGE, handleCodeChange);
     }
 
     return () => {
-      socket?.off(ACTIONS.CODE_CHANGE);
+      editor.off('change', changeHandler);
+      editor.off('cursorActivity', updateCursor);
+      socket?.off(ACTIONS.CURSOR_CHANGE, handleCursorChange);
+      socket?.off(ACTIONS.JOINED, handleJoined);
+      socket?.off(ACTIONS.DISCONNECTED, handleDisconnected);
+      socket?.off(ACTIONS.CODE_CHANGE, handleCodeChange);
+      clearCursorMarks();
+      remoteCursorsRef.current.clear();
+      redrawRemoteCursorsRef.current = () => {};
+      editor.toTextArea();
+      editorRef.current = null;
     };
   }, [socket]);
 
-  return <textarea id="realtimeEditor" ref={textareaRef}></textarea>;
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.setOption('readOnly', !canEdit);
+    editor.setOption('mode', getMode(activeFile?.language));
+  }, [activeFile?.language, canEdit]);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const code = activeFile?.code || '';
+    if (editor.getValue() !== code) editor.setValue(code);
+    redrawRemoteCursorsRef.current();
+  }, [activeFile?.id, activeFile?.code]);
+
+  return <textarea id="realtimeEditor" ref={textareaRef} />;
 };
 
 export default Editor;
