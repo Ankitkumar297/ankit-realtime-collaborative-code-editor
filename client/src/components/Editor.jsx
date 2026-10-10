@@ -93,9 +93,10 @@ const Editor = ({ socket, roomId, activeFile, onCodeChange, canEdit }) => {
         const color = cursor.color || '#8be9fd';
         const anchor = editor.clipPos(cursor.anchor);
         const head = editor.clipPos(cursor.head);
-        if (editor.comparePos(anchor, head) !== 0) {
-          const from = editor.comparePos(anchor, head) < 0 ? anchor : head;
-          const to = editor.comparePos(anchor, head) < 0 ? head : anchor;
+        const positionOrder = Codemirror.cmpPos(anchor, head);
+        if (positionOrder !== 0) {
+          const from = positionOrder < 0 ? anchor : head;
+          const to = positionOrder < 0 ? head : anchor;
           cursorMarksRef.current.push(editor.markText(from, to, {
             className: 'remote-selection',
             css: `background-color: ${color}; opacity: 0.24;`,
@@ -151,16 +152,12 @@ const Editor = ({ socket, roomId, activeFile, onCodeChange, canEdit }) => {
       drawRemoteCursors();
     };
 
-    const handleCodeChange = ({ fileId, code }) => {
-      if (fileId !== propsRef.current.activeFile?.id || typeof code !== 'string') return;
-      if (editor.getValue() !== code) editor.setValue(code);
-    };
-
     const changeHandler = (instance, change) => {
+      if (change.origin === 'setValue') return;
       const current = propsRef.current;
       const code = instance.getValue();
       current.onCodeChange?.(current.activeFile?.id, code);
-      if (change.origin !== 'setValue' && current.canEdit && current.activeFile) {
+      if (current.canEdit && current.activeFile) {
         current.socket?.emit(ACTIONS.CODE_CHANGE, {
           roomId: current.roomId,
           fileId: current.activeFile.id,
@@ -175,7 +172,6 @@ const Editor = ({ socket, roomId, activeFile, onCodeChange, canEdit }) => {
       socket.on(ACTIONS.CURSOR_CHANGE, handleCursorChange);
       socket.on(ACTIONS.JOINED, handleJoined);
       socket.on(ACTIONS.DISCONNECTED, handleDisconnected);
-      socket.on(ACTIONS.CODE_CHANGE, handleCodeChange);
     }
 
     return () => {
@@ -184,7 +180,6 @@ const Editor = ({ socket, roomId, activeFile, onCodeChange, canEdit }) => {
       socket?.off(ACTIONS.CURSOR_CHANGE, handleCursorChange);
       socket?.off(ACTIONS.JOINED, handleJoined);
       socket?.off(ACTIONS.DISCONNECTED, handleDisconnected);
-      socket?.off(ACTIONS.CODE_CHANGE, handleCodeChange);
       clearCursorMarks();
       remoteCursorsRef.current.clear();
       redrawRemoteCursorsRef.current = () => {};

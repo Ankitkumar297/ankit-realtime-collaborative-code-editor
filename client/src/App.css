@@ -37,6 +37,13 @@ body {
   font-weight: bold;
 }
 
+.roomInviteHelp {
+  color: #c5c7d3;
+  line-height: 1.5;
+  margin: -8px 0 20px;
+  overflow-wrap: anywhere;
+}
+
 .inputGroup {
   display: flex;
   flex-direction: column;

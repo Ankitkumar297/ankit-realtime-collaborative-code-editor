@@ -5,7 +5,7 @@ import Client from '../components/Client';
 import Editor from '../components/Editor';
 import Chat from '../components/Chat';
 import { initSocket } from '../socket';
-import { Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
@@ -57,6 +57,8 @@ const EditorPage = () => {
   const [ownerSocketId, setOwnerSocketId] = useState(null);
   const [permissions, setPermissions] = useState({});
   const location = useLocation();
+  const [username, setUsername] = useState(() => location.state?.username?.trim() || '');
+  const [inviteUsername, setInviteUsername] = useState('');
   const { roomId } = useParams();
   const reactNavigator = useNavigate();
   const terminalRef = useRef(null);
@@ -122,8 +124,8 @@ const EditorPage = () => {
   }, []);
 
   useEffect(() => {
-    const username = location.state?.username?.trim();
-    if (!username) return undefined;
+    const joiningUsername = username.trim();
+    if (!joiningUsername) return undefined;
 
     const currentSocket = initSocket();
     socketRef.current = currentSocket;
@@ -192,7 +194,7 @@ const EditorPage = () => {
     const handleConnect = () => {
       setIsConnected(true);
       setHasJoinedRoom(false);
-      currentSocket.emit(ACTIONS.JOIN, { roomId, username });
+      currentSocket.emit(ACTIONS.JOIN, { roomId, username: joiningUsername });
     };
     const handleDisconnect = () => {
       setIsConnected(false);
@@ -217,7 +219,7 @@ const EditorPage = () => {
       currentSocket.disconnect();
       if (socketRef.current === currentSocket) socketRef.current = null;
     };
-  }, [roomId, location.state?.username]);
+  }, [roomId, username]);
 
   const publishFiles = (nextFiles) => {
     filesRef.current = nextFiles;
@@ -304,7 +306,37 @@ const EditorPage = () => {
     });
   };
 
-  if (!location.state?.username) return <Navigate to="/" />;
+  if (!username.trim()) {
+    return (
+      <div className="mainWrap">
+        <form
+          className="formWrap"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const name = inviteUsername.trim();
+            if (name) setUsername(name);
+          }}
+        >
+          <h2 className="mainLabel">Join this CodeCollab room</h2>
+          <p className="roomInviteHelp">Enter your name to join room {roomId}.</p>
+          <div className="inputGroup">
+            <input
+              type="text"
+              className="inputBox"
+              placeholder="YOUR NAME"
+              aria-label="Your name"
+              autoComplete="name"
+              maxLength={32}
+              required
+              value={inviteUsername}
+              onChange={(event) => setInviteUsername(event.target.value)}
+            />
+            <button className="btn joinBtn" type="submit">Join room</button>
+          </div>
+        </form>
+      </div>
+    );
+  }
 
   return (
     <div className="editorPageWrap">
@@ -438,7 +470,7 @@ const EditorPage = () => {
         </div>
       </main>
 
-      <Chat socket={socket} roomId={roomId} username={location.state?.username} />
+      <Chat socket={socket} roomId={roomId} username={username} />
     </div>
   );
 };
