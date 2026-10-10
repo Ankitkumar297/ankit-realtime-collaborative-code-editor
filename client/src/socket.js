@@ -1,14 +1,15 @@
 import { io } from 'socket.io-client';
 
-export const initSocket = async () => {
+export const initSocket = () => {
   const options = {
-    'force new connection': true,
+    forceNew: true,
+    autoConnect: false,
     reconnectionAttempts: Infinity,
     reconnection: true,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,
-    timeout: 10000,
-    transports: ['websocket', 'polling'],
+    timeout: 20000,
+    transports: ['polling', 'websocket'],
   };
 
   const backendUrl =

@@ -8,8 +8,9 @@
   ],
   "scripts": {
     "install:all": "npm install",
-    "dev": "npm run dev --workspace=client",
-    "dev:all": "concurrently \"npm run server:dev\" \"npm run dev\"",
+    "dev": "concurrently -k \"npm run server:dev\" \"npm run client:dev\"",
+    "client:dev": "npm run dev --workspace=client",
+    "dev:all": "npm run dev",
     "build": "npm run build --workspace=client",
     "server:dev": "nodemon --ignore server/temp server/server.js",
     "server:prod": "node server/server.js",

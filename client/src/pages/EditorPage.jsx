@@ -19,7 +19,6 @@ const EditorPage = () => {
   const [socket, setSocket] = useState(null);
   const socketRef = useRef(null);
   const codeRef = useRef(null);
-  const hasJoined = useRef(false);
   const location = useLocation();
   const { roomId } = useParams();
   const reactNavigator = useNavigate();
@@ -83,22 +82,17 @@ const EditorPage = () => {
 
   // Socket Logic
   useEffect(() => {
-    if (hasJoined.current) return;
-    hasJoined.current = true;
+    if (!location.state?.username) return;
+    const s = initSocket();
+    const syncTimers = new Set();
 
-    const init = async () => {
-      const s = await initSocket();
+    const init = () => {
       setSocket(s);
       socketRef.current = s;
       
       socketRef.current.on('connect_error', (err) => {
         console.log('socket error', err);
         toast.error('Socket connection failed, retrying...');
-      });
-
-      socketRef.current.emit(ACTIONS.JOIN, {
-        roomId,
-        username: location.state?.username,
       });
 
       // Handle reconnection: re-join the room if the socket reconnects
@@ -115,13 +109,15 @@ const EditorPage = () => {
           toast.success(`${username} joined the room.`);
           // Send current code to the new user
           // We use a small timeout to ensure the new user's editor is ready to receive
-          setTimeout(() => {
-            socketRef.current.emit(ACTIONS.SYNC_CODE, {
+          const timer = setTimeout(() => {
+            syncTimers.delete(timer);
+            s.emit(ACTIONS.SYNC_CODE, {
               code: codeRef.current,
               socketId,
               language: languageRef.current,
             });
           }, 500);
+          syncTimers.add(timer);
         }
         setClients(clients);
       });
@@ -134,17 +130,18 @@ const EditorPage = () => {
       socketRef.current.on(ACTIONS.CODE_OUTPUT, (data) => {
         xtermRef.current?.write(data);
       });
+      s.connect();
     };
 
     init();
 
     return () => {
-      socketRef.current?.disconnect();
-      socketRef.current?.off(ACTIONS.JOINED);
-      socketRef.current?.off(ACTIONS.DISCONNECTED);
-      socketRef.current?.off(ACTIONS.CODE_OUTPUT);
+      syncTimers.forEach(clearTimeout);
+      s.removeAllListeners();
+      s.disconnect();
+      if (socketRef.current === s) socketRef.current = null;
     };
-  }, [roomId]); // Only depend on roomId
+  }, [roomId, location.state?.username]);
 
   async function copyRoomId() {
     try {
