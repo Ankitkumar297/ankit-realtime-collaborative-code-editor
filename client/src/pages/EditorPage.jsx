@@ -48,6 +48,7 @@ const nameForLanguage = (name, language, otherFiles) => {
 const EditorPage = () => {
   const [socket, setSocket] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [hasJoinedRoom, setHasJoinedRoom] = useState(false);
   const socketRef = useRef(null);
   const [clients, setClients] = useState([]);
   const [files, setFiles] = useState([]);
@@ -68,7 +69,7 @@ const EditorPage = () => {
   );
   const isOwner = Boolean(socket?.id && socket.id === ownerSocketId);
   const canEdit = Boolean(
-    socket?.id && (isOwner || permissions[socket.id] === 'editor'),
+    hasJoinedRoom && socket?.id && (isOwner || permissions[socket.id] === 'editor'),
   );
 
   useEffect(() => {
@@ -111,7 +112,13 @@ const EditorPage = () => {
     });
     const handleResize = () => fitAddon.fit();
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      terminalInputActiveRef.current = false;
+      terminalInputBufferRef.current = '';
+      term.dispose();
+      if (xtermRef.current === term) xtermRef.current = null;
+    };
   }, []);
 
   useEffect(() => {
@@ -140,6 +147,7 @@ const EditorPage = () => {
 
     const handleJoined = ({ clients: nextClients, username: joinedUsername, socketId, room }) => {
       applyRoom(room, nextClients);
+      if (socketId === currentSocket.id) setHasJoinedRoom(true);
       if (socketId !== currentSocket.id) {
         toast.success(`${joinedUsername} joined the room.`);
       }
@@ -183,10 +191,12 @@ const EditorPage = () => {
 
     const handleConnect = () => {
       setIsConnected(true);
+      setHasJoinedRoom(false);
       currentSocket.emit(ACTIONS.JOIN, { roomId, username });
     };
     const handleDisconnect = () => {
       setIsConnected(false);
+      setHasJoinedRoom(false);
       terminalInputActiveRef.current = false;
       terminalInputBufferRef.current = '';
     };
@@ -301,7 +311,7 @@ const EditorPage = () => {
       <aside className="aside">
         <div className="asideInner">
           <div className="logo"><h2 style={{ color: '#4aee88' }}>CodeCollab</h2></div>
-          <h3>Connected</h3>
+          <h3>{hasJoinedRoom ? 'Connected' : isConnected ? 'Joining room…' : 'Connecting…'}</h3>
           <div className="clientsList">
             {clients.map((client) => (
               <Client
@@ -313,9 +323,11 @@ const EditorPage = () => {
             ))}
           </div>
           <div className="roomPermissionNote">
-            {isOwner
+            {!hasJoinedRoom
+              ? 'Waiting for room access…'
+              : isOwner
               ? 'You own this room. Set each collaborator to editor or viewer.'
-              : `Room owner: ${clients.find((client) => client.socketId === ownerSocketId)?.username || 'connecting...'}`}
+              : `Room owner: ${clients.find((client) => client.socketId === ownerSocketId)?.username || 'reconnecting...'}`}
           </div>
         </div>
         <div className="asideBtns">
@@ -345,7 +357,8 @@ const EditorPage = () => {
             </select>
           </label>
           <div className="editorHeaderActions">
-            {!canEdit && <span className="readOnlyBadge">View only</span>}
+            {!hasJoinedRoom && <span className="readOnlyBadge">Joining room…</span>}
+            {hasJoinedRoom && !canEdit && <span className="readOnlyBadge">View only</span>}
             {canEdit && activeFile && (
               <button className="btn renameFileBtn" onClick={() => renameFile(activeFile)}>Rename file</button>
             )}
@@ -353,9 +366,11 @@ const EditorPage = () => {
               className="btn runBtn"
               onClick={runCode}
               disabled={!canEdit || !isConnected || !activeFile}
-              title={!isConnected ? 'Waiting for the room connection' : 'Run the active file'}
+              title={!isConnected
+                ? 'Waiting for the room connection'
+                : !hasJoinedRoom ? 'Waiting for room access' : !canEdit ? 'Ask the room owner for edit access' : 'Run the active file'}
             >
-              {isConnected ? 'Run Code' : 'Connecting...'}
+              {!isConnected ? 'Connecting…' : !hasJoinedRoom ? 'Joining…' : !canEdit ? 'View only' : 'Run Code'}
             </button>
           </div>
         </div>
